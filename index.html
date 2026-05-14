@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍽️ 今天吃什么？</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1a1a2e;
+    --card: #16213e;
+    --accent: #e94560;
+    --accent-glow: rgba(233, 69, 96, 0.4);
+    --text: #eaeaea;
+    --text-muted: #8892a4;
+    --gold: #ffd700;
+    --tip-bg: rgba(233, 69, 96, 0.08);
+    --tip-border: rgba(233, 69, 96, 0.2);
+  }
+
+  body {
+    font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* 背景装饰 */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(233, 69, 96, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(255, 215, 0, 0.06) 0%, transparent 50%);
+    animation: bgFloat 20s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes bgFloat {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    33% { transform: translate(2%, -1%) rotate(1deg); }
+    66% { transform: translate(-1%, 2%) rotate(-1deg); }
+  }
+
+  .container {
+    text-align: center;
+    z-index: 1;
+    width: 100%;
+    max-width: 560px;
+    padding: 20px;
+  }
+
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+    background: linear-gradient(135deg, var(--accent), var(--gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .date-display {
+    color: var(--accent);
+    font-size: 0.85rem;
+    margin-bottom: 0.3rem;
+    letter-spacing: 1px;
+    font-weight: 500;
+  }
+
+  .daily-tip {
+    display: inline-block;
+    background: var(--tip-bg);
+    border: 1px solid var(--tip-border);
+    color: var(--accent);
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    margin-bottom: 0.3rem;
+    transition: all 0.3s;
+  }
+
+  .daily-tip.empty {
+    background: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.06);
+    color: var(--text-muted);
+  }
+
+  .pool-label {
+    display: inline-block;
+    background: rgba(255, 215, 0, 0.08);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    color: var(--gold);
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    margin-bottom: 1.8rem;
+  }
+
+  /* 抽签主区域 */
+  .slot-area {
+    position: relative;
+    height: 200px;
+    margin-bottom: 2rem;
+    border-radius: 20px;
+    background: var(--card);
+    border: 2px solid rgba(233, 69, 96, 0.15);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    overflow: hidden;
+  }
+
+  /* 上下渐隐遮罩 */
+  .slot-area::before,
+  .slot-area::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 50px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .slot-area::before { top: 0; background: linear-gradient(to bottom, var(--card), transparent); }
+  .slot-area::after { bottom: 0; background: linear-gradient(to top, var(--card), transparent); }
+
+  /* 中间指示线 */
+  .slot-indicator {
+    position: absolute;
+    top: 50%; left: 8%; right: 8%;
+    transform: translateY(-50%);
+    height: 2px;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .slot-indicator::before,
+  .slot-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 0; height: 0;
+    border: 6px solid transparent;
+  }
+  .slot-indicator::before {
+    left: 0; transform: translateY(-50%);
+    border-left: 8px solid var(--accent);
+  }
+  .slot-indicator::after {
+    right: 0; transform: translateY(-50%);
+    border-right: 8px solid var(--accent);
+  }
+
+  .slot-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .slot-track {
+    position: absolute;
+    width: 100%;
+    top: 0;
+    left: 0;
+    will-change: transform;
+  }
+
+  .slot-item {
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text-muted);
+    opacity: 0.35;
+    user-select: none;
+  }
+
+  .slot-item.active {
+    color: var(--text);
+    opacity: 1;
+    font-size: 2rem;
+    text-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  /* 框内结果覆盖层 */
+  .slot-result {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--card);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+    z-index: 4;
+  }
+
+  .slot-result.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .slot-result-emoji {
+    font-size: 3rem;
+    margin-bottom: 0.2rem;
+    opacity: 0;
+    transform: scale(0);
+    transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s;
+  }
+
+  .slot-result.show .slot-result-emoji {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .slot-result-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.2rem;
+    opacity: 0;
+    transition: opacity 0.4s ease 0.25s;
+  }
+
+  .slot-result.show .slot-result-label {
+    opacity: 1;
+  }
+
+  .slot-result-text {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--gold);
+    opacity: 0;
+    transform: scale(0.8) translateY(8px);
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s;
+  }
+
+  .slot-result.show .slot-result-text {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  /* 按钮 */
+  .btn-draw {
+    background: linear-gradient(135deg, var(--accent), #c0392b);
+    color: white;
+    border: none;
+    padding: 16px 56px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(233, 69, 96, 0.4);
+    letter-spacing: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-draw:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 28px rgba(233, 69, 96, 0.6);
+  }
+
+  .btn-draw:active {
+    transform: translateY(0);
+  }
+
+  .btn-draw:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-draw::after {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: linear-gradient(transparent, rgba(255,255,255,0.1), transparent);
+    transform: rotate(45deg) translateX(-100%);
+    transition: transform 0.6s;
+  }
+
+  .btn-draw:hover::after {
+    transform: rotate(45deg) translateX(100%);
+  }
+
+  /* 底部选项概览 */
+  .options-bar {
+    margin-top: 2.5rem;
+    padding: 16px 20px;
+    background: rgba(22, 33, 62, 0.6);
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .options-title {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .options-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .tag {
+    background: rgba(233, 69, 96, 0.1);
+    border: 1px solid rgba(233, 69, 96, 0.2);
+    color: var(--text);
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    transition: all 0.3s;
+  }
+
+  .tag.highlight {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  /* 历史记录 */
+  .history-section {
+    margin-top: 2rem;
+    width: 100%;
+  }
+
+  .history-toggle {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-muted);
+    padding: 8px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.3s;
+  }
+
+  .history-toggle:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .history-list {
+    margin-top: 12px;
+    text-align: left;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+  }
+
+  .history-list.open {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.85rem;
+  }
+
+  .history-item .date { color: var(--text-muted); }
+  .history-item .food { color: var(--gold); font-weight: 600; }
+
+  /* 彩花效果 */
+  .confetti-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+    overflow: hidden;
+  }
+
+  .confetti {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    top: -10px;
+    animation: confettiFall linear forwards;
+  }
+
+  @keyframes confettiFall {
+    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(233, 69, 96, 0.3); border-radius: 4px; }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 1.6rem; }
+    .slot-item { font-size: 1.3rem; height: 80px; }
+    .slot-item.active { font-size: 1.6rem; }
+    .slot-result-text { font-size: 1.5rem; }
+    .btn-draw { padding: 14px 44px; font-size: 1rem; }
+    .daily-tip { font-size: 0.72rem; padding: 3px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🍽️ 今天吃什么？</h1>
+  <p class="subtitle">不知道吃什么，就交给命运吧！</p>
+  <div class="date-display" id="dateDisplay"></div>
+  <div class="daily-tip empty" id="dailyTip">💡 当日 Tips</div>
+  <div class="pool-label" id="poolLabel"></div>
+
+  <div class="slot-area" id="slotArea">
+    <div class="slot-viewport">
+      <div class="slot-track" id="slotTrack">
+        <div class="slot-item active" style="margin-top:50px;">🎲 点击下方开始抽签</div>
+      </div>
+    </div>
+    <div class="slot-indicator"></div>
+    <div class="slot-result" id="slotResult">
+      <div class="slot-result-emoji" id="resultEmoji"></div>
+      <div class="slot-result-label" id="resultLabel"></div>
+      <div class="slot-result-text" id="resultText"></div>
+    </div>
+  </div>
+
+  <button class="btn-draw" id="btnDraw" onclick="startDraw()">🥢 开 抽</button>
+
+  <div class="options-bar">
+    <div class="options-title">📋 候选菜单（<span id="optionCount">0</span> 项）</div>
+    <div class="options-tags" id="optionsTags"></div>
+  </div>
+
+  <div class="history-section">
+    <button class="history-toggle" onclick="toggleHistory()">📜 抽签记录</button>
+    <div class="history-list" id="historyList"></div>
+  </div>
+</div>
+
+<div class="confetti-container" id="confettiContainer"></div>
+
+<script>
+// ========== 食物数据 ==========
+// 全量选项（用于展示），时段过滤见下方 DINNER_ONLY
+const FOOD_OPTIONS = [
+  // ---- 午餐时段 ----
+  { name: "知福里面馆", emoji: "🍜" },
+  { name: "华三爷面馆", emoji: "🍜" },
+  { name: "小红椒炒菜", emoji: "🌶️" },
+  { name: "云阿蛮米线", emoji: "🍝" },
+  { name: "台湾卤肉饭", emoji: "🍚" },
+  { name: "闽燕记", emoji: "🥟" },
+  { name: "孔岳冒菜", emoji: "🥬" },
+  { name: "温暖黑猪", emoji: "🍖" },
+  { name: "小杨生煎", emoji: "🥟" },
+  { name: "林起新烧腊", emoji: "🍗" },
+  { name: "藕巷汤饭", emoji: "🍲" },
+  { name: "鼎鼎轩面馆", emoji: "🍜" },
+  { name: "山西面馆", emoji: "🍜" },
+  // ---- 晚餐时段 ----
+  { name: "食堂水饺", emoji: "🥟" },
+  { name: "食堂麻辣烫", emoji: "🍲" },
+  { name: "食堂盖浇饭", emoji: "🍱" },
+  { name: "滨江食堂自选", emoji: "🍽️" },
+  { name: "麦当劳", emoji: "🍔" },
+  { name: "滨江烧腊", emoji: "🍗" },
+  { name: "食堂烤鱼", emoji: "🐟" },
+];
+
+// ========== 晚餐时段选项（仅这些在 13:00-23:59 出现） ==========
+const DINNER_ONLY = ["食堂水饺", "食堂麻辣烫", "食堂盖浇饭", "滨江食堂自选", "麦当劳", "滨江烧腊", "食堂烤鱼"];
+
+// ========== 每日Tips配置 ==========
+// key: 0=日 1=一 2=二 3=三 4=四 5=五 6=六
+const DAILY_TIPS = {
+  1: "🛒 杨佳德盒马会员日",
+  2: "🛒 梓琪盒马会员日",
+  4: "🛒 周文帅廷盒马会员日",
+};
+
+// ========== 午/晚餐时段候选池 ==========
+// 午餐：排除晚餐专属选项  |  晚餐：仅晚餐选项
+function getPool() {
+  const h = new Date().getHours();
+  if (h >= 13 && h <= 23) {
+    return FOOD_OPTIONS.filter(f => DINNER_ONLY.includes(f.name));
+  }
+  return FOOD_OPTIONS.filter(f => !DINNER_ONLY.includes(f.name));
+}
+
+function getPoolLabel() {
+  const h = new Date().getHours();
+  if (h >= 13 && h <= 23) {
+    return "🌙 晚餐模式";
+  }
+  return "☀️ 午餐模式";
+}
+
+// ========== 状态 ==========
+let isSpinning = false;
+let history = JSON.parse(localStorage.getItem('foodPickerHistory') || '[]');
+
+// ========== 初始化 ==========
+function init() {
+  renderDate();
+  renderTip();
+  renderPool();
+  renderOptions();
+  renderHistory();
+}
+
+function renderDate() {
+  const now = new Date();
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const w = weekdays[now.getDay()];
+  document.getElementById('dateDisplay').textContent = `${m}月${d}日 星期${w}`;
+}
+
+function renderTip() {
+  const tipEl = document.getElementById('dailyTip');
+  const today = new Date().getDay();
+  const tip = DAILY_TIPS[today];
+  if (tip) {
+    tipEl.textContent = tip;
+    tipEl.classList.remove('empty');
+  } else {
+    tipEl.textContent = '💡 今日暂无 Tips';
+    tipEl.classList.add('empty');
+  }
+}
+
+function renderPool() {
+  const pool = getPool();
+  const label = document.getElementById('poolLabel');
+  label.textContent = `${getPoolLabel()}（${pool.length} 项可选）`;
+}
+
+function renderOptions() {
+  const container = document.getElementById('optionsTags');
+  const count = document.getElementById('optionCount');
+  const pool = getPool();
+  count.textContent = pool.length;
+  container.innerHTML = pool.map(f =>
+    `<span class="tag" data-food="${f.name}">${f.emoji} ${f.name}</span>`
+  ).join('');
+}
+
+// ========== 抽签核心（基于 requestAnimationFrame 的平滑滚动） ==========
+function startDraw() {
+  if (isSpinning) return;
+  const pool = getPool();
+  if (pool.length === 0) return;
+
+  isSpinning = true;
+  const btn = document.getElementById('btnDraw');
+  const slotResult = document.getElementById('slotResult');
+  const resultEmoji = document.getElementById('resultEmoji');
+  const resultLabel = document.getElementById('resultLabel');
+  const resultText = document.getElementById('resultText');
+  const track = document.getElementById('slotTrack');
+
+  btn.disabled = true;
+
+  // 隐藏上次结果
+  slotResult.classList.remove('show');
+  resultLabel.textContent = '';
+  resultText.textContent = '';
+  resultEmoji.textContent = '';
+  document.querySelectorAll('.tag.highlight').forEach(t => t.classList.remove('highlight'));
+
+  // 选出最终结果
+  const finalIndex = Math.floor(Math.random() * pool.length);
+  const finalFood = pool[finalIndex];
+
+  // 获取实际 item 高度
+  const isMobile = window.innerWidth <= 480;
+  const itemHeight = isMobile ? 80 : 100;
+  const viewportHeight = document.getElementById('slotArea').offsetHeight;
+  const centerOffset = (viewportHeight - itemHeight) / 2; // 垂直居中偏移
+
+  // 构建序列：只在可见窗口附近放内容，避免渲染过多DOM
+  // 总共滚动 totalScroll 项的距离
+  const minScrolls = 30;
+  const extraScrolls = Math.floor(Math.random() * 20);
+  const totalScrolls = minScrolls + extraScrolls;
+
+  // 序列：前面是随机食物（滚动用），最后一个是结果
+  let items = [];
+  for (let i = 0; i < totalScrolls; i++) {
+    items.push(pool[Math.floor(Math.random() * pool.length)]);
+  }
+  items.push(finalFood); // 最后一个 = 结果
+
+  // 渲染 DOM
+  track.innerHTML = items.map((f, i) =>
+    `<div class="slot-item ${i === items.length - 1 ? 'active' : ''}">${f.emoji} ${f.name}</div>`
+  ).join('');
+
+  // 重置位置到顶部
+  track.style.transition = 'none';
+  track.style.transform = `translateY(${centerOffset}px)`;
+
+  // 强制 reflow
+  track.offsetHeight;
+
+  // 计算目标位置：让最后一个 item 停在视窗中央
+  const targetY = centerOffset - (items.length - 1) * itemHeight;
+
+  // 动画参数
+  const duration = 2500 + Math.random() * 1000;
+  const startTime = performance.now();
+  const startY = centerOffset;
+
+  // 缓动函数：先快后慢
+  function easeOutQuint(t) {
+    return 1 - Math.pow(1 - t, 5);
+  }
+
+  function animate(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const easedProgress = easeOutQuint(progress);
+
+    const currentY = startY + (targetY - startY) * easedProgress;
+    track.style.transform = `translateY(${currentY}px)`;
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // 滚动结束，显示结果
+      onSpinComplete(finalFood, slotResult, resultEmoji, resultLabel, resultText, btn);
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+function onSpinComplete(finalFood, slotResult, resultEmoji, resultLabel, resultText, btn) {
+  // 在框内展示结果
+  resultEmoji.textContent = finalFood.emoji;
+  resultLabel.textContent = '🎯 命运之选';
+  resultText.textContent = finalFood.name;
+  slotResult.classList.add('show');
+
+  // 高亮标签
+  document.querySelectorAll('.tag').forEach(t => {
+    if (t.dataset.food === finalFood.name) t.classList.add('highlight');
+  });
+
+  // 放彩花
+  launchConfetti();
+
+  // 记录历史
+  addHistory(finalFood);
+
+  // 刷新选项展示（跨时段时候选池可能变化）
+  renderOptions();
+  renderPool();
+
+  isSpinning = false;
+  btn.disabled = false;
+}
+
+// ========== 彩花 ==========
+function launchConfetti() {
+  const container = document.getElementById('confettiContainer');
+  const colors = ['#e94560', '#ffd700', '#ff6b6b', '#48dbfb', '#ff9ff3', '#feca57', '#54a0ff'];
+  const shapes = ['■', '●', '▲', '★', '♦'];
+
+  for (let i = 0; i < 50; i++) {
+    const confetti = document.createElement('div');
+    confetti.className = 'confetti';
+    confetti.textContent = shapes[Math.floor(Math.random() * shapes.length)];
+    confetti.style.left = Math.random() * 100 + '%';
+    confetti.style.color = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.fontSize = (8 + Math.random() * 12) + 'px';
+    confetti.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    confetti.style.animationDelay = Math.random() * 0.5 + 's';
+    container.appendChild(confetti);
+  }
+
+  setTimeout(() => {
+    container.innerHTML = '';
+  }, 4000);
+}
+
+// ========== 历史记录 ==========
+function addHistory(food) {
+  const now = new Date();
+  const dateStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  history.unshift({ date: dateStr, name: food.name, emoji: food.emoji });
+  if (history.length > 30) history = history.slice(0, 30);
+  localStorage.setItem('foodPickerHistory', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (history.length === 0) {
+    list.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:0.85rem;text-align:center;">暂无记录，快去抽签吧</div>';
+    return;
+  }
+  list.innerHTML = history.map(h =>
+    `<div class="history-item"><span class="date">${h.date}</span><span class="food">${h.emoji} ${h.name}</span></div>`
+  ).join('');
+}
+
+function toggleHistory() {
+  document.getElementById('historyList').classList.toggle('open');
+}
+
+// 启动
+init();
+</script>
+
+</body>
+</html>
